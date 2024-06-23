@@ -1,1 +1,1 @@
-numpy pandas matplotlib streamlit
+numpy pandas matplotlib streamlit;
