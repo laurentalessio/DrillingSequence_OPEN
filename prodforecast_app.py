@@ -122,6 +122,56 @@ def calculate_drilling_start_dates(df, reference_date, monsoon_start, monsoon_en
     start_dates_df = pd.DataFrame(start_dates)
     return start_dates_df, monsoon_months_df
 
+# def generate_production_profile(df, start_dates_df):
+#     st.sidebar.write("Generating production profiles...")
+#     all_profiles = []
+#     params_list = []
+
+#     progress_bar = st.sidebar.progress(0)
+#     total_wells = len(start_dates_df)
+
+#     for index, (_, row) in enumerate(start_dates_df.iterrows()):
+#         if st.session_state.stop:
+#             break
+
+#         well_name = row['Well Name']
+#         rig_name = row['Rig Name']
+#         start_date = row['Start Date']
+#         day_index = row['Day Index']
+
+#         well_info = df[df['Well Series Name'].str.contains(well_name.split('_well')[0])]
+#         initial_rate = well_info['Initial Rate'].values[0]
+#         ultimate_recovery = well_info['Ultimate Recovery'].values[0]
+#         production_period_months = well_info['Production Period'].values[0]
+
+#         try:
+#             di, b, production_profile = create_well_decline_parameters(initial_rate, ultimate_recovery, production_period_months)
+#             params_list.append({'Well Name': well_name, 'Rig Name': rig_name, 'di': di, 'b': b})
+
+#             production_profile = [0] * day_index + list(production_profile)
+#             production_profile = production_profile[:int(production_period_months * DAYS_PER_MONTH)]
+#             production_profile = [round(p, 1) for p in production_profile]
+
+#             all_profiles.append(pd.DataFrame({well_name: production_profile}))
+
+#         except Exception as e:
+#             st.sidebar.write(f"Error processing {well_name}: {e}")
+
+#         progress_bar.progress((index + 1) / total_wells)
+
+#     progress_bar.empty()
+#     params_df = pd.DataFrame(params_list)
+
+#     st.sidebar.write("Aggregating production profiles...")
+#     production_profiles = pd.concat(all_profiles, axis=1)
+#     production_profiles['Total'] = production_profiles.sum(axis=1)
+#     production_profiles = production_profiles.loc[:production_profiles['Total'].ne(0)[::-1].idxmax()]
+#     production_profiles = production_profiles.drop(columns=['Total'])
+
+#     st.sidebar.write("Finished aggregating production profiles.")
+#     return params_df, production_profiles.fillna(0)
+
+
 def generate_production_profile(df, start_dates_df):
     st.sidebar.write("Generating production profiles...")
     all_profiles = []
@@ -129,6 +179,8 @@ def generate_production_profile(df, start_dates_df):
 
     progress_bar = st.sidebar.progress(0)
     total_wells = len(start_dates_df)
+
+    max_days = 0  # Track the maximum number of days
 
     for index, (_, row) in enumerate(start_dates_df.iterrows()):
         if st.session_state.stop:
@@ -149,10 +201,11 @@ def generate_production_profile(df, start_dates_df):
             params_list.append({'Well Name': well_name, 'Rig Name': rig_name, 'di': di, 'b': b})
 
             production_profile = [0] * day_index + list(production_profile)
-            production_profile = production_profile[:int(production_period_months * DAYS_PER_MONTH)]
-            production_profile = [round(p, 1) for p in production_profile]
+            max_days = max(max_days, len(production_profile))
 
-            all_profiles.append(pd.DataFrame({well_name: production_profile}))
+            # Create a DataFrame with a unique index for each well
+            profile_df = pd.DataFrame({well_name: production_profile}, index=range(day_index, day_index + len(production_profile)))
+            all_profiles.append(profile_df)
 
         except Exception as e:
             st.sidebar.write(f"Error processing {well_name}: {e}")
@@ -163,13 +216,21 @@ def generate_production_profile(df, start_dates_df):
     params_df = pd.DataFrame(params_list)
 
     st.sidebar.write("Aggregating production profiles...")
+    
+    # Concatenate all profiles
     production_profiles = pd.concat(all_profiles, axis=1)
+    
+    # Fill NaN values with 0
+    production_profiles = production_profiles.fillna(0)
+    
+    # Calculate total production and trim the DataFrame
     production_profiles['Total'] = production_profiles.sum(axis=1)
     production_profiles = production_profiles.loc[:production_profiles['Total'].ne(0)[::-1].idxmax()]
     production_profiles = production_profiles.drop(columns=['Total'])
 
     st.sidebar.write("Finished aggregating production profiles.")
-    return params_df, production_profiles.fillna(0)
+    return params_df, production_profiles
+
 
 def convert_production_table_to_dates(production_table, reference_date):
     reference_date = pd.to_datetime(reference_date)
@@ -204,58 +265,54 @@ def plot_production(production_table_with_dates):
     plt.subplots_adjust(bottom=0.2)
     st.pyplot(fig)
     
-# Drilling sequence plotting 
+
 def plot_drilling_sequence(start_dates_df, reference_date, df):
-    # Convert reference_date to datetime if it's not already
     reference_date = pd.to_datetime(reference_date)
-    
-    # Sort the dataframe by Rig Name and Start Date
     start_dates_df = start_dates_df.sort_values(['Rig Name', 'Start Date'])
-    
-    # Get unique rig names and years
     rig_names = start_dates_df['Rig Name'].unique()
     years = sorted(start_dates_df['Start Date'].dt.year.unique())
     
-    # Create a color map for well series
     well_series = df['Well Series Name'].unique()
     color_map = plt.cm.get_cmap('tab20')
     color_dict = {series: color_map(i/len(well_series)) for i, series in enumerate(well_series)}
     
-    # Create the plot
-    fig, axes = plt.subplots(len(years), 1, figsize=(20, 5*len(years)), squeeze=False)
-    fig.suptitle('Drilling Sequence Visualization', fontsize=16)
+    max_years_per_plot = 12
+    for i in range(0, len(years), max_years_per_plot):
+        current_years = years[i:i+max_years_per_plot]
+        fig, axes = plt.subplots(len(current_years), 1, figsize=(15, 4*len(current_years)), squeeze=False)
+        fig.suptitle(f'Drilling Sequence Visualization ({current_years[0]}-{current_years[-1]})', fontsize=16)
+        
+        for year_idx, year in enumerate(current_years):
+            ax = axes[year_idx, 0]
+            ax.set_title(f'Year {year}')
+            ax.set_xlim(pd.Timestamp(year=year, month=1, day=1), pd.Timestamp(year=year, month=12, day=31))
+            ax.set_ylim(-1, len(rig_names))
+            ax.set_yticks(range(len(rig_names)))
+            ax.set_yticklabels(rig_names)
+            ax.grid(True, axis='x', linestyle='--', alpha=0.7)
+            
+            for month in range(1, 13):
+                ax.axvline(pd.Timestamp(year=year, month=month, day=1), color='gray', linestyle='-', alpha=0.5)
+            
+            for idx, rig in enumerate(rig_names):
+                rig_data = start_dates_df[(start_dates_df['Rig Name'] == rig) & (start_dates_df['Start Date'].dt.year == year)]
+                for _, well in rig_data.iterrows():
+                    start = well['Start Date']
+                    end = start + pd.Timedelta(days=df[df['Well Series Name'].str.contains(well['Well Name'].split('_well')[0])]['Individual well drilling Time'].values[0] * DAYS_PER_MONTH)
+                    series = well['Well Name'].split('_well')[0]
+                    ax.barh(idx, (end - start).days, left=start, height=0.5, 
+                            color=color_dict[series], alpha=0.8, 
+                            edgecolor='black', linewidth=1)
+                    ax.text(start, idx, well['Well Name'], va='center', ha='left', fontsize=8, rotation=0)
+            
+            ax.set_xlabel('Date')
+            ax.xaxis.set_major_locator(mdates.MonthLocator())
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+        
+        plt.tight_layout()
+        st.pyplot(fig)
     
-    for year_idx, year in enumerate(years):
-        ax = axes[year_idx, 0]
-        ax.set_title(f'Year {year}')
-        ax.set_xlim(pd.Timestamp(year=year, month=1, day=1), pd.Timestamp(year=year, month=12, day=31))
-        ax.set_ylim(-1, len(rig_names))
-        ax.set_yticks(range(len(rig_names)))
-        ax.set_yticklabels(rig_names)
-        ax.grid(True, axis='x', linestyle='--', alpha=0.7)
-        
-        for month in range(1, 13):
-            ax.axvline(pd.Timestamp(year=year, month=month, day=1), color='gray', linestyle='-', alpha=0.5)
-        
-        for idx, rig in enumerate(rig_names):
-            rig_data = start_dates_df[(start_dates_df['Rig Name'] == rig) & (start_dates_df['Start Date'].dt.year == year)]
-            for _, well in rig_data.iterrows():
-                start = well['Start Date']
-                end = start + pd.Timedelta(days=df[df['Well Series Name'].str.contains(well['Well Name'].split('_well')[0])]['Individual well drilling Time'].values[0] * DAYS_PER_MONTH)
-                series = well['Well Name'].split('_well')[0]
-                ax.barh(idx, (end - start).days, left=start, height=0.5, 
-                        color=color_dict[series], alpha=0.8, 
-                        edgecolor='black', linewidth=1)
-                ax.text(start, idx, well['Well Name'], va='center', ha='left', fontsize=8, rotation=0)
-        
-        ax.set_xlabel('Date')
-        ax.xaxis.set_major_locator(mdates.MonthLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
-    
-    plt.tight_layout()
-    st.pyplot(fig)
-
-    #Create a legend for well series
+    # Create a legend for well series
     legend_fig, legend_ax = plt.subplots(figsize=(8, 2))
     legend_ax.axis('off')
     for series, color in color_dict.items():
