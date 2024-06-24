@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta
 import matplotlib.dates as mdates
 
+
 # Constants
 DAYS_PER_MONTH = 365.25 / 12
 
@@ -224,9 +225,9 @@ def plot_drilling_sequence(start_dates_df, reference_date, df):
     years = sorted(start_dates_df['Start Date'].dt.year.unique())
     
     well_series = df['Well Series Name'].unique()
-    color_map = plt.cm.get_cmap('tab20')
+    color_map = plt.colormaps['tab20']  # Changed from plt.cm.get_cmap('tab20')
     color_dict = {series: color_map(i/len(well_series)) for i, series in enumerate(well_series)}
-    
+       
     max_years_per_plot = 12
     for i in range(0, len(years), max_years_per_plot):
         current_years = years[i:i+max_years_per_plot]
