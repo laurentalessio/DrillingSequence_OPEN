@@ -122,55 +122,6 @@ def calculate_drilling_start_dates(df, reference_date, monsoon_start, monsoon_en
     start_dates_df = pd.DataFrame(start_dates)
     return start_dates_df, monsoon_months_df
 
-# def generate_production_profile(df, start_dates_df):
-#     st.sidebar.write("Generating production profiles...")
-#     all_profiles = []
-#     params_list = []
-
-#     progress_bar = st.sidebar.progress(0)
-#     total_wells = len(start_dates_df)
-
-#     for index, (_, row) in enumerate(start_dates_df.iterrows()):
-#         if st.session_state.stop:
-#             break
-
-#         well_name = row['Well Name']
-#         rig_name = row['Rig Name']
-#         start_date = row['Start Date']
-#         day_index = row['Day Index']
-
-#         well_info = df[df['Well Series Name'].str.contains(well_name.split('_well')[0])]
-#         initial_rate = well_info['Initial Rate'].values[0]
-#         ultimate_recovery = well_info['Ultimate Recovery'].values[0]
-#         production_period_months = well_info['Production Period'].values[0]
-
-#         try:
-#             di, b, production_profile = create_well_decline_parameters(initial_rate, ultimate_recovery, production_period_months)
-#             params_list.append({'Well Name': well_name, 'Rig Name': rig_name, 'di': di, 'b': b})
-
-#             production_profile = [0] * day_index + list(production_profile)
-#             production_profile = production_profile[:int(production_period_months * DAYS_PER_MONTH)]
-#             production_profile = [round(p, 1) for p in production_profile]
-
-#             all_profiles.append(pd.DataFrame({well_name: production_profile}))
-
-#         except Exception as e:
-#             st.sidebar.write(f"Error processing {well_name}: {e}")
-
-#         progress_bar.progress((index + 1) / total_wells)
-
-#     progress_bar.empty()
-#     params_df = pd.DataFrame(params_list)
-
-#     st.sidebar.write("Aggregating production profiles...")
-#     production_profiles = pd.concat(all_profiles, axis=1)
-#     production_profiles['Total'] = production_profiles.sum(axis=1)
-#     production_profiles = production_profiles.loc[:production_profiles['Total'].ne(0)[::-1].idxmax()]
-#     production_profiles = production_profiles.drop(columns=['Total'])
-
-#     st.sidebar.write("Finished aggregating production profiles.")
-#     return params_df, production_profiles.fillna(0)
-
 
 def generate_production_profile(df, start_dates_df):
     st.sidebar.write("Generating production profiles...")
